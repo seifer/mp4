@@ -1,7 +1,6 @@
 package mp4
 
 import (
-	"bufio"
 	"fmt"
 	"io"
 )
@@ -12,14 +11,13 @@ import (
 //
 // Contains all meta-data. To be able to stream a file, the moov box should be placed before the mdat box.
 type MoovBox struct {
-	Mvhd *MvhdBox
-	Iods *IodsBox
-	Trak []*TrakBox
-	Udta *UdtaBox
+	Mvhd  *MvhdBox
+	Trak  []*TrakBox
+	boxes []Box
 }
 
 func DecodeMoov(r io.Reader) (Box, error) {
-	l, err := DecodeContainer(bufio.NewReaderSize(r, 512*1024))
+	l, err := DecodeContainer(r)
 	if err != nil {
 		return nil, err
 	}
@@ -28,32 +26,30 @@ func DecodeMoov(r io.Reader) (Box, error) {
 		switch b.Type() {
 		case "mvhd":
 			m.Mvhd = b.(*MvhdBox)
-		case "iods":
-			m.Iods = b.(*IodsBox)
 		case "trak":
 			m.Trak = append(m.Trak, b.(*TrakBox))
-		case "udta":
-			m.Udta = b.(*UdtaBox)
+		default:
+			m.boxes = append(m.boxes, b)
 		}
 	}
-	return m, err
+	return m, nil
 }
 
 func (b *MoovBox) Type() string {
 	return "moov"
 }
 
-func (b *MoovBox) Size() int {
-	sz := b.Mvhd.Size()
-	if b.Iods != nil {
-		sz += b.Iods.Size()
-	}
+func (b *MoovBox) Size() (sz int) {
+	sz += b.Mvhd.Size()
+
 	for _, t := range b.Trak {
 		sz += t.Size()
 	}
-	if b.Udta != nil {
-		sz += b.Udta.Size()
+
+	for _, box := range b.boxes {
+		sz += box.Size()
 	}
+
 	return sz + BoxHeaderSize
 }
 
@@ -65,29 +61,22 @@ func (b *MoovBox) Dump() {
 	}
 }
 
-func (b *MoovBox) Encode(w io.Writer) error {
-	err := EncodeHeader(b, w)
-	if err != nil {
-		return err
+func (b *MoovBox) Encode(w io.Writer) (err error) {
+	if err = EncodeHeader(b, w); err != nil {
+		return
 	}
-	err = b.Mvhd.Encode(w)
-	if err != nil {
-		return err
-	}
-	if b.Iods != nil {
-		err = b.Iods.Encode(w)
-		if err != nil {
-			return err
-		}
-	}
+
 	for _, t := range b.Trak {
-		err = t.Encode(w)
-		if err != nil {
-			return err
+		if err = t.Encode(w); err != nil {
+			return
 		}
 	}
-	if b.Udta != nil {
-		return b.Udta.Encode(w)
+
+	for _, b := range b.boxes {
+		if err = b.Encode(w); err != nil {
+			return
+		}
 	}
-	return nil
+
+	return b.Mvhd.Encode(w)
 }

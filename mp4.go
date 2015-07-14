@@ -15,7 +15,6 @@ import (
 //
 // Other boxes can also be present (pdin, moof, mfra, free, ...), but are not decoded.
 type MP4 struct {
-	Ftyp  *FtypBox
 	Moov  *MoovBox
 	Mdat  *MdatBox
 	boxes []Box
@@ -23,30 +22,21 @@ type MP4 struct {
 
 // Decode decodes a media from a Reader
 func Decode(r io.Reader) (*MP4, error) {
-	v := &MP4{
-		boxes: []Box{},
+	l, err := DecodeContainer(r)
+	if err != nil {
+		return nil, err
 	}
-LoopBoxes:
-	for {
-		h, err := DecodeHeader(r)
-		if err != nil {
-			return nil, err
-		}
-		box, err := DecodeBox(h, r)
-		if err != nil {
-			return nil, err
-		}
-		switch h.Type {
-		case "ftyp":
-			v.Ftyp = box.(*FtypBox)
+	v := &MP4{
+		boxes: make([]Box, 0, len(l)-3),
+	}
+	for _, b := range l {
+		switch b.Type() {
 		case "moov":
-			v.Moov = box.(*MoovBox)
+			v.Moov = b.(*MoovBox)
 		case "mdat":
-			v.Mdat = box.(*MdatBox)
-			v.Mdat.ContentSize = h.Size - BoxHeaderSize
-			break LoopBoxes
+			v.Mdat = b.(*MdatBox)
 		default:
-			v.boxes = append(v.boxes, box)
+			v.boxes = append(v.boxes, b)
 		}
 	}
 	return v, nil
@@ -54,7 +44,6 @@ LoopBoxes:
 
 // Dump displays some information about a media
 func (m *MP4) Dump() {
-	m.Ftyp.Dump()
 	m.Moov.Dump()
 }
 
@@ -64,11 +53,7 @@ func (m *MP4) Boxes() []Box {
 }
 
 // Encode encodes a media to a Writer
-func (m *MP4) Encode(w io.Writer) error {
-	err := m.Ftyp.Encode(w)
-	if err != nil {
-		return err
-	}
+func (m *MP4) Encode(w io.Writer) (err error) {
 	err = m.Moov.Encode(w)
 	if err != nil {
 		return err
@@ -79,20 +64,15 @@ func (m *MP4) Encode(w io.Writer) error {
 			return err
 		}
 	}
-	err = m.Mdat.Encode(w)
-	if err != nil {
-		return err
-	}
-	return nil
+	return m.Mdat.Encode(w)
 }
 
-func (m *MP4) Size() (size int) {
-	size += m.Ftyp.Size()
-	size += m.Moov.Size()
-	size += m.Mdat.Size()
+func (m *MP4) Size() (sz int) {
+	sz += m.Moov.Size()
+	sz += m.Mdat.Size()
 
 	for _, b := range m.Boxes() {
-		size += b.Size()
+		sz += b.Size()
 	}
 
 	return

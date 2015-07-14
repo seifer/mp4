@@ -8,11 +8,9 @@ import "io"
 //
 // A media file can contain one or more tracks.
 type TrakBox struct {
-	Tkhd *TkhdBox
-	Mdia *MdiaBox
-	Edts *EdtsBox
-	Udta *UdtaBox
-	Tref *TrefBox
+	Tkhd  *TkhdBox
+	Mdia  *MdiaBox
+	boxes []Box
 }
 
 func DecodeTrak(r io.Reader) (Box, error) {
@@ -20,21 +18,17 @@ func DecodeTrak(r io.Reader) (Box, error) {
 	if err != nil {
 		return nil, err
 	}
-	t := &TrakBox{}
+	t := &TrakBox{
+		boxes: make([]Box, 0, len(l)-2),
+	}
 	for _, b := range l {
 		switch b.Type() {
 		case "tkhd":
 			t.Tkhd = b.(*TkhdBox)
 		case "mdia":
 			t.Mdia = b.(*MdiaBox)
-		case "edts":
-			t.Edts = b.(*EdtsBox)
-		case "udta":
-			t.Udta = b.(*UdtaBox)
-		case "tref":
-			t.Tref = b.(*TrefBox)
 		default:
-			return nil, ErrBadFormat
+			t.boxes = append(t.boxes, b)
 		}
 	}
 	return t, nil
@@ -44,55 +38,36 @@ func (b *TrakBox) Type() string {
 	return "trak"
 }
 
-func (b *TrakBox) Size() int {
-	sz := b.Tkhd.Size()
+func (b *TrakBox) Size() (sz int) {
+	sz += b.Tkhd.Size()
 	sz += b.Mdia.Size()
-	if b.Edts != nil {
-		sz += b.Edts.Size()
+
+	for _, box := range b.boxes {
+		sz += box.Size()
 	}
-	if b.Udta != nil {
-		sz += b.Udta.Size()
-	}
-	if b.Tref != nil {
-		sz += b.Tref.Size()
-	}
+
 	return sz + BoxHeaderSize
 }
 
 func (b *TrakBox) Dump() {
 	b.Tkhd.Dump()
-	if b.Edts != nil {
-		b.Edts.Dump()
-	}
 	b.Mdia.Dump()
 }
 
-func (b *TrakBox) Encode(w io.Writer) error {
-	err := EncodeHeader(b, w)
-	if err != nil {
-		return err
+func (b *TrakBox) Encode(w io.Writer) (err error) {
+	if err = EncodeHeader(b, w); err != nil {
+		return
 	}
-	err = b.Tkhd.Encode(w)
-	if err != nil {
-		return err
+
+	if err = b.Tkhd.Encode(w); err != nil {
+		return
 	}
-	if b.Edts != nil {
-		err = b.Edts.Encode(w)
-		if err != nil {
-			return err
+
+	for _, b := range b.boxes {
+		if err = b.Encode(w); err != nil {
+			return
 		}
 	}
-	if b.Udta != nil {
-		err = b.Udta.Encode(w)
-		if err != nil {
-			return err
-		}
-	}
-	if b.Tref != nil {
-		err = b.Tref.Encode(w)
-		if err != nil {
-			return err
-		}
-	}
+
 	return b.Mdia.Encode(w)
 }

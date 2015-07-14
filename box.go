@@ -13,7 +13,6 @@ const (
 )
 
 var (
-	ErrUnknownBoxType  = errors.New("unknown box type")
 	ErrTruncatedHeader = errors.New("truncated header")
 	ErrBadFormat       = errors.New("bad format")
 )
@@ -22,23 +21,14 @@ var decoders map[string]BoxDecoder
 
 func init() {
 	decoders = map[string]BoxDecoder{
-		"ftyp": DecodeFtyp,
 		"moov": DecodeMoov,
 		"mvhd": DecodeMvhd,
-		"iods": DecodeIods,
 		"trak": DecodeTrak,
-		"udta": DecodeUdta,
 		"tkhd": DecodeTkhd,
-		"edts": DecodeEdts,
-		"elst": DecodeElst,
 		"mdia": DecodeMdia,
 		"minf": DecodeMinf,
 		"mdhd": DecodeMdhd,
 		"hdlr": DecodeHdlr,
-		"vmhd": DecodeVmhd,
-		"smhd": DecodeSmhd,
-		"dinf": DecodeDinf,
-		"dref": DecodeDref,
 		"stbl": DecodeStbl,
 		"stco": DecodeStco,
 		"stsc": DecodeStsc,
@@ -47,34 +37,18 @@ func init() {
 		"stsd": DecodeStsd,
 		"stts": DecodeStts,
 		"stss": DecodeStss,
-		"meta": DecodeMeta,
 		"mdat": DecodeMdat,
-		"free": DecodeFree,
-		"name": DecodeName,
-		"tref": DecodeTref,
-		"gmhd": DecodeGmhd,
-		"chpl": DecodeChpl,
 	}
 }
 
-// The header of a box
-type BoxHeader struct {
-	Type string
-	Size uint32
+// A box
+type Box interface {
+	Size() int
+	Type() string
+	Encode(w io.Writer) error
 }
 
-// DecodeHeader decodes a box header (size + box type)
-func DecodeHeader(r io.Reader) (BoxHeader, error) {
-	buf := make([]byte, BoxHeaderSize)
-	n, err := r.Read(buf)
-	if err != nil {
-		return BoxHeader{}, err
-	}
-	if n != BoxHeaderSize {
-		return BoxHeader{}, ErrTruncatedHeader
-	}
-	return BoxHeader{string(buf[4:8]), binary.BigEndian.Uint32(buf[0:4])}, nil
-}
+type BoxDecoder func(r io.Reader) (Box, error)
 
 // EncodeHeader encodes a box header to a writer
 func EncodeHeader(b Box, w io.Writer) error {
@@ -85,44 +59,48 @@ func EncodeHeader(b Box, w io.Writer) error {
 	return err
 }
 
-// A box
-type Box interface {
-	Type() string
-	Size() int
-	Encode(w io.Writer) error
-}
-
-type BoxDecoder func(r io.Reader) (Box, error)
-
-// DecodeBox decodes a box
-func DecodeBox(h BoxHeader, r io.Reader) (Box, error) {
-	d := decoders[h.Type]
-	if d == nil {
-		return nil, ErrUnknownBoxType
-	}
-	b, err := d(io.LimitReader(r, int64(h.Size-BoxHeaderSize)))
-	if err != nil {
-		return nil, err
-	}
-	return b, nil
-}
-
 // DecodeContainer decodes a container box
-func DecodeContainer(r io.Reader) ([]Box, error) {
-	l := []Box{}
+func DecodeContainer(r io.Reader) (l []Box, err error) {
+	var b Box
+	var ht string
+	var hs uint32
+
+	buf := make([]byte, BoxHeaderSize)
+
 	for {
-		h, err := DecodeHeader(r)
-		if err == io.EOF {
+		n, err := r.Read(buf)
+
+		if err != nil {
+			if err == io.EOF {
+				return l, nil
+			} else {
+				return nil, err
+			}
+		}
+
+		if n != BoxHeaderSize {
+			return nil, ErrTruncatedHeader
+		}
+
+		ht = string(buf[4:8])
+		hs = binary.BigEndian.Uint32(buf[0:4])
+
+		if d := decoders[ht]; d != nil {
+			b, err = d(io.LimitReader(r, int64(hs-BoxHeaderSize)))
+		} else {
+			b, err = DecodeUni(io.LimitReader(r, int64(hs-BoxHeaderSize)), ht)
+		}
+
+		if err != nil {
+			return nil, err
+		}
+
+		l = append(l, b)
+
+		if ht == "mdat" {
+			b.(*MdatBox).ContentSize = hs - BoxHeaderSize
 			return l, nil
 		}
-		if err != nil {
-			return l, err
-		}
-		b, err := DecodeBox(h, r)
-		if err != nil {
-			return l, err
-		}
-		l = append(l, b)
 	}
 }
 

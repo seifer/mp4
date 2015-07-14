@@ -184,7 +184,6 @@ func (f *clipFilter) Filter() (err error) {
 	f.buildChunkList()
 
 	bsz := uint32(mp4.BoxHeaderSize)
-	bsz += uint32(f.m.Ftyp.Size())
 	bsz += uint32(f.m.Moov.Size())
 
 	for _, b := range f.m.Boxes() {
@@ -201,10 +200,6 @@ func (f *clipFilter) Filter() (err error) {
 	// Prepare blob with moov and other small atoms
 	buffer := make([]byte, 0)
 	Buffer := bytes.NewBuffer(buffer)
-
-	if err = f.m.Ftyp.Encode(Buffer); err != nil {
-		return
-	}
 
 	if err = f.m.Moov.Encode(Buffer); err != nil {
 		return
@@ -380,7 +375,7 @@ func (f *clipFilter) buildChunkList() {
 	fbegin := f.begin
 	fend := f.end
 
-	// Find close l-frame fro begin and end
+	// Find close l-frame from begin and end
 	for tnum, t := range f.m.Moov.Trak {
 		var p uint32
 
@@ -674,9 +669,8 @@ func (f *clipFilter) buildChunkList() {
 
 		// co64 ?
 
-		t.Mdia.Minf.Stbl.Stco.ChunkOffset = newChunkOffset[tnum]
-
 		t.Mdia.Minf.Stbl.Stsc.FirstChunk = newFirstChunk[tnum]
+		t.Mdia.Minf.Stbl.Stco.ChunkOffset = newChunkOffset[tnum]
 		t.Mdia.Minf.Stbl.Stsc.SamplesPerChunk = newSamplesPerChunk[tnum]
 		t.Mdia.Minf.Stbl.Stsc.SampleDescriptionID = newSampleDescriptionID[tnum]
 	}

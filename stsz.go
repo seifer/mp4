@@ -2,7 +2,6 @@ package mp4
 
 import (
 	"encoding/binary"
-	"fmt"
 	"io"
 )
 
@@ -17,12 +16,12 @@ import (
 // This table lists the size of each sample. If all samples have the same size, it can be defined in the
 // SampleUniformSize attribute.
 type StszBox struct {
-	Version           byte
-	Flags             [3]byte
-	header            [8]byte
-	SampleUniformSize uint32
+	body   []byte
+	header [8]byte
+
+	SampleStart       uint32
 	SampleNumber      uint32
-	SampleSize        []uint32
+	SampleUniformSize uint32
 }
 
 func DecodeStsz(r io.Reader) (Box, error) {
@@ -32,20 +31,9 @@ func DecodeStsz(r io.Reader) (Box, error) {
 		return nil, err
 	}
 
-	c := binary.BigEndian.Uint32(data[8:12])
 	b := &StszBox{
-		Flags:             [3]byte{data[1], data[2], data[3]},
-		Version:           data[0],
-		SampleNumber:      c,
+		body:              data,
 		SampleUniformSize: binary.BigEndian.Uint32(data[4:8]),
-	}
-
-	if b.SampleUniformSize == 0 {
-		b.SampleSize = make([]uint32, c)
-
-		for i := 0; i < int(c); i++ {
-			b.SampleSize[i] = binary.BigEndian.Uint32(data[(12 + 4*i):(16 + 4*i)])
-		}
 	}
 
 	return b, nil
@@ -56,44 +44,41 @@ func (b *StszBox) Type() string {
 }
 
 func (b *StszBox) Size() int {
-	return BoxHeaderSize + 12 + len(b.SampleSize)*4
+	return BoxHeaderSize + 12 + int(b.SampleNumber)*4
 }
 
-func (b *StszBox) Dump() {
-	if len(b.SampleSize) == 0 {
-		fmt.Printf("Samples : %d total samples\n", b.SampleNumber)
-	} else {
-		fmt.Printf("Samples : %d total samples\n", len(b.SampleSize))
+func (b *StszBox) Encode(w io.Writer) (err error) {
+	defer func() {
+		b.body = nil
+	}()
+
+	binary.BigEndian.PutUint32(b.header[:4], uint32(b.Size()))
+	copy(b.header[4:], b.Type())
+
+	if _, err = w.Write(b.header[:]); err != nil {
+		return
 	}
+
+	binary.BigEndian.PutUint32(b.body[8:12], uint32(b.SampleNumber))
+
+	if _, err = w.Write(b.body[:12]); err != nil {
+		return
+	}
+
+	if b.SampleUniformSize == 0 {
+		if _, err = w.Write(b.body[12+4*b.SampleStart : 16+4*(b.SampleStart+b.SampleNumber-1)]); err != nil {
+			return
+		}
+	}
+
+	return err
 }
 
 // GetSampleSize returns the size (in bytes) of a sample
 func (b *StszBox) GetSampleSize(i int) uint32 {
-	if i > len(b.SampleSize) {
+	if b.SampleUniformSize > 0 {
 		return b.SampleUniformSize
 	}
-	return b.SampleSize[i-1]
-}
 
-func (b *StszBox) Encode(w io.Writer) error {
-	binary.BigEndian.PutUint32(b.header[:4], uint32(b.Size()))
-	copy(b.header[4:], b.Type())
-	_, err := w.Write(b.header[:])
-	if err != nil {
-		return err
-	}
-	buf := makebuf(b)
-	buf[0] = b.Version
-	buf[1], buf[2], buf[3] = b.Flags[0], b.Flags[1], b.Flags[2]
-	binary.BigEndian.PutUint32(buf[4:], b.SampleUniformSize)
-	if len(b.SampleSize) == 0 {
-		binary.BigEndian.PutUint32(buf[8:], b.SampleNumber)
-	} else {
-		binary.BigEndian.PutUint32(buf[8:], uint32(len(b.SampleSize)))
-		for i := range b.SampleSize {
-			binary.BigEndian.PutUint32(buf[12+4*i:], b.SampleSize[i])
-		}
-	}
-	_, err = w.Write(buf)
-	return err
+	return binary.BigEndian.Uint32(b.body[(12 + 4*i):(16 + 4*i)])
 }

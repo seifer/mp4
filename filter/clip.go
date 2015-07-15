@@ -450,7 +450,7 @@ func (f *clipFilter) buildChunkList() {
 		}
 	}
 
-	for cnt > 1 {
+	for cnt > 0 {
 		mv = 0
 
 		for tnum, t := range f.m.Moov.Trak {
@@ -481,7 +481,7 @@ func (f *clipFilter) buildChunkList() {
 
 		for i := 0; i < int(samples); i++ {
 			cti.currentSample++
-			size += stsz.GetSampleSize(int(cti.currentSample))
+			size += stsz.GetSampleSize(int(cti.currentSample) - 1)
 		}
 
 		off += size
@@ -513,11 +513,7 @@ func (f *clipFilter) buildChunkList() {
 
 	for tnum, t := range f.m.Moov.Trak {
 		cti := &ti[tnum]
-		stco := t.Mdia.Minf.Stbl.Stco
-		stsc := t.Mdia.Minf.Stbl.Stsc
-		stsz := t.Mdia.Minf.Stbl.Stsz
 		stts := t.Mdia.Minf.Stbl.Stts
-
 		end := stts.GetTimeCode(cti.currentSample + 1)
 
 		t.Tkhd.Duration = ((end - cti.startTC) / t.Mdia.Mdhd.Timescale) * f.m.Moov.Mvhd.Timescale
@@ -525,44 +521,6 @@ func (f *clipFilter) buildChunkList() {
 
 		if t.Tkhd.Duration > f.m.Moov.Mvhd.Duration {
 			f.m.Moov.Mvhd.Duration = t.Tkhd.Duration
-		}
-
-		if !cti.rebuilded {
-			for i := cti.currentChunk; i < len(stco.ChunkOffset); i++ {
-				newChunkOffset[tnum] = append(newChunkOffset[tnum], off)
-
-				if cti.sci < len(stsc.FirstChunk)-1 && cti.currentChunk+1 >= int(stsc.FirstChunk[cti.sci+1]) {
-					cti.sci++
-				}
-
-				samples := stsc.SamplesPerChunk[cti.sci]
-				descriptionID := stsc.SampleDescriptionID[cti.sci]
-
-				size = 0
-
-				for i := 0; i < int(samples); i++ {
-					cti.currentSample++
-					size += stsz.GetSampleSize(int(cti.currentSample))
-				}
-
-				off += size
-				f.m.Mdat.ContentSize += size
-
-				f.chunks = append(f.chunks, chunk{
-					size:      int64(size),
-					oldOffset: int64(stco.ChunkOffset[i]),
-				})
-
-				if samples != firstChunkSamples[tnum] || descriptionID != firstChunkDescriptionID[tnum] {
-					newFirstChunk[tnum] = append(newFirstChunk[tnum], uint32(i))
-					newSamplesPerChunk[tnum] = append(newSamplesPerChunk[tnum], samples)
-					newSampleDescriptionID[tnum] = append(newSampleDescriptionID[tnum], descriptionID)
-					firstChunkSamples[tnum] = samples
-					firstChunkDescriptionID[tnum] = descriptionID
-				}
-
-				cti.currentChunk++
-			}
 		}
 
 		// stts - sample duration
@@ -622,20 +580,8 @@ func (f *clipFilter) buildChunkList() {
 
 		// stsz (sample sizes)
 		if stsz := t.Mdia.Minf.Stbl.Stsz; stsz != nil {
-			firstSample := cti.firstSample
-			currentSample := cti.currentSample
-
-			oldSampleSize := stsz.SampleSize
-
-			newSampleSize := make([]uint32, 0, len(oldSampleSize))
-
-			for n, sz := range oldSampleSize {
-				if uint32(n) >= firstSample-1 && uint32(n) <= currentSample-1 {
-					newSampleSize = append(newSampleSize, sz)
-				}
-			}
-
-			stsz.SampleSize = newSampleSize
+			stsz.SampleStart = cti.firstSample - 1
+			stsz.SampleNumber = cti.currentSample - cti.firstSample + 1
 		}
 
 		// ctts - time offsets (b-frames)

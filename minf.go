@@ -1,6 +1,9 @@
 package mp4
 
-import "io"
+import (
+	"encoding/binary"
+	"io"
+)
 
 // Media Information Box (minf - mandatory)
 //
@@ -8,8 +11,9 @@ import "io"
 //
 // Status: partially decoded (hmhd - hint tracks - and nmhd - null media - are ignored)
 type MinfBox struct {
-	Stbl  *StblBox
-	boxes []Box
+	Stbl   *StblBox
+	boxes  []Box
+	header [8]byte
 }
 
 func DecodeMinf(r io.Reader) (Box, error) {
@@ -50,8 +54,11 @@ func (b *MinfBox) Dump() {
 }
 
 func (b *MinfBox) Encode(w io.Writer) (err error) {
-	if err = EncodeHeader(b, w); err != nil {
-		return
+	binary.BigEndian.PutUint32(b.header[:4], uint32(b.Size()))
+	copy(b.header[4:], b.Type())
+	_, err = w.Write(b.header[:])
+	if err != nil {
+		return err
 	}
 
 	for _, b := range b.boxes {

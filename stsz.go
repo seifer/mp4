@@ -19,6 +19,7 @@ import (
 type StszBox struct {
 	Version           byte
 	Flags             [3]byte
+	header            [8]byte
 	SampleUniformSize uint32
 	SampleNumber      uint32
 	SampleSize        []uint32
@@ -75,7 +76,9 @@ func (b *StszBox) GetSampleSize(i int) uint32 {
 }
 
 func (b *StszBox) Encode(w io.Writer) error {
-	err := EncodeHeader(b, w)
+	binary.BigEndian.PutUint32(b.header[:4], uint32(b.Size()))
+	copy(b.header[4:], b.Type())
+	_, err := w.Write(b.header[:])
 	if err != nil {
 		return err
 	}

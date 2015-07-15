@@ -1,6 +1,7 @@
 package mp4
 
 import (
+	"encoding/binary"
 	"fmt"
 	"io"
 )
@@ -11,9 +12,10 @@ import (
 //
 // Contains all meta-data. To be able to stream a file, the moov box should be placed before the mdat box.
 type MoovBox struct {
-	Mvhd  *MvhdBox
-	Trak  []*TrakBox
-	boxes []Box
+	Mvhd   *MvhdBox
+	Trak   []*TrakBox
+	boxes  []Box
+	header [8]byte
 }
 
 func DecodeMoov(r io.Reader) (Box, error) {
@@ -62,8 +64,11 @@ func (b *MoovBox) Dump() {
 }
 
 func (b *MoovBox) Encode(w io.Writer) (err error) {
-	if err = EncodeHeader(b, w); err != nil {
-		return
+	binary.BigEndian.PutUint32(b.header[:4], uint32(b.Size()))
+	copy(b.header[4:], b.Type())
+	_, err = w.Write(b.header[:])
+	if err != nil {
+		return err
 	}
 
 	for _, t := range b.Trak {

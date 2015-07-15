@@ -1,6 +1,9 @@
 package mp4
 
-import "io"
+import (
+	"encoding/binary"
+	"io"
+)
 
 // Media Box (mdia - mandatory)
 //
@@ -10,9 +13,10 @@ import "io"
 //
 // Contains all information about the media data.
 type MdiaBox struct {
-	Mdhd  *MdhdBox
-	Minf  *MinfBox
-	boxes []Box
+	Mdhd   *MdhdBox
+	Minf   *MinfBox
+	boxes  []Box
+	header [8]byte
 }
 
 func DecodeMdia(r io.Reader) (Box, error) {
@@ -61,14 +65,16 @@ func (b *MdiaBox) Dump() {
 	}
 }
 
-func (b *MdiaBox) Encode(w io.Writer) error {
-	err := EncodeHeader(b, w)
+func (b *MdiaBox) Encode(w io.Writer) (err error) {
+	binary.BigEndian.PutUint32(b.header[:4], uint32(b.Size()))
+	copy(b.header[4:], b.Type())
+	_, err = w.Write(b.header[:])
 	if err != nil {
-		return err
+		return
 	}
 	err = b.Mdhd.Encode(w)
 	if err != nil {
-		return err
+		return
 	}
 
 	for _, b := range b.boxes {

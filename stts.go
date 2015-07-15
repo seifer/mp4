@@ -19,6 +19,7 @@ import (
 type SttsBox struct {
 	Version         byte
 	Flags           [3]byte
+	header          [8]byte
 	SampleCount     []uint32
 	SampleTimeDelta []uint32
 }
@@ -62,7 +63,9 @@ func (b *SttsBox) Dump() {
 }
 
 func (b *SttsBox) Encode(w io.Writer) error {
-	err := EncodeHeader(b, w)
+	binary.BigEndian.PutUint32(b.header[:4], uint32(b.Size()))
+	copy(b.header[4:], b.Type())
+	_, err := w.Write(b.header[:])
 	if err != nil {
 		return err
 	}

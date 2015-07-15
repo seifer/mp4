@@ -2,6 +2,7 @@ package filter
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -211,7 +212,13 @@ func (f *clipFilter) Filter() (err error) {
 		}
 	}
 
-	mp4.EncodeHeader(f.m.Mdat, Buffer)
+	buf := make([]byte, mp4.BoxHeaderSize)
+	binary.BigEndian.PutUint32(buf, uint32(f.m.Mdat.Size()))
+	copy(buf[4:], f.m.Mdat.Type())
+
+	if _, err = Buffer.Write(buf); err != nil {
+		return
+	}
 
 	f.size = int64(f.m.Size())
 	f.buffer = Buffer.Bytes()

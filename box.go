@@ -48,15 +48,6 @@ type Box interface {
 
 type BoxDecoder func(r io.Reader) (Box, error)
 
-// EncodeHeader encodes a box header to a writer
-func EncodeHeader(b Box, w io.Writer) error {
-	buf := make([]byte, BoxHeaderSize)
-	binary.BigEndian.PutUint32(buf, uint32(b.Size()))
-	strtobuf(buf[4:], b.Type(), 4)
-	_, err := w.Write(buf)
-	return err
-}
-
 // DecodeContainer decodes a container box
 func DecodeContainer(r io.Reader) (l []Box, err error) {
 	var b Box
@@ -130,15 +121,6 @@ func fixed32(bytes []byte) Fixed32 {
 
 func putFixed32(bytes []byte, i Fixed32) {
 	binary.BigEndian.PutUint32(bytes, uint32(i))
-}
-
-func strtobuf(out []byte, str string, l int) {
-	in := []byte(str)
-	if l < len(in) {
-		copy(out, in)
-	} else {
-		copy(out, in[0:l])
-	}
 }
 
 func makebuf(b Box) []byte {

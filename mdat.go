@@ -1,6 +1,9 @@
 package mp4
 
-import "io"
+import (
+	"encoding/binary"
+	"io"
+)
 
 // Media Data Box (mdat - optional)
 //
@@ -11,6 +14,7 @@ import "io"
 // It is not read, only the io.Reader is stored, and will be used to Encode (io.Copy) the box to a io.Writer.
 type MdatBox struct {
 	ContentSize uint32
+	header      [8]byte
 	r           io.Reader
 }
 
@@ -35,7 +39,9 @@ func (b *MdatBox) Reader() io.Reader {
 }
 
 func (b *MdatBox) Encode(w io.Writer) error {
-	err := EncodeHeader(b, w)
+	binary.BigEndian.PutUint32(b.header[:4], uint32(b.Size()))
+	copy(b.header[4:], b.Type())
+	_, err := w.Write(b.header[:])
 	if err != nil {
 		return err
 	}

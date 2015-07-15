@@ -19,6 +19,7 @@ import (
 type TkhdBox struct {
 	Version          byte
 	Flags            [3]byte
+	header           [8]byte
 	CreationTime     uint32
 	ModificationTime uint32
 	TrackId          uint32
@@ -60,7 +61,9 @@ func (b *TkhdBox) Size() int {
 }
 
 func (b *TkhdBox) Encode(w io.Writer) error {
-	err := EncodeHeader(b, w)
+	binary.BigEndian.PutUint32(b.header[:4], uint32(b.Size()))
+	copy(b.header[4:], b.Type())
+	_, err := w.Write(b.header[:])
 	if err != nil {
 		return err
 	}

@@ -13,6 +13,7 @@ import (
 type CttsBox struct {
 	Version      byte
 	Flags        [3]byte
+	header       [8]byte
 	SampleCount  []uint32
 	SampleOffset []uint32 // int32 for version 1
 }
@@ -49,7 +50,9 @@ func (b *CttsBox) Size() int {
 }
 
 func (b *CttsBox) Encode(w io.Writer) error {
-	err := EncodeHeader(b, w)
+	binary.BigEndian.PutUint32(b.header[:4], uint32(b.Size()))
+	copy(b.header[4:], b.Type())
+	_, err := w.Write(b.header[:])
 	if err != nil {
 		return err
 	}

@@ -1,6 +1,9 @@
 package mp4
 
-import "io"
+import (
+	"encoding/binary"
+	"io"
+)
 
 // Track Box (tkhd - mandatory)
 //
@@ -8,9 +11,10 @@ import "io"
 //
 // A media file can contain one or more tracks.
 type TrakBox struct {
-	Tkhd  *TkhdBox
-	Mdia  *MdiaBox
-	boxes []Box
+	Tkhd   *TkhdBox
+	Mdia   *MdiaBox
+	boxes  []Box
+	header [8]byte
 }
 
 func DecodeTrak(r io.Reader) (Box, error) {
@@ -55,8 +59,11 @@ func (b *TrakBox) Dump() {
 }
 
 func (b *TrakBox) Encode(w io.Writer) (err error) {
-	if err = EncodeHeader(b, w); err != nil {
-		return
+	binary.BigEndian.PutUint32(b.header[:4], uint32(b.Size()))
+	copy(b.header[4:], b.Type())
+	_, err = w.Write(b.header[:])
+	if err != nil {
+		return err
 	}
 
 	if err = b.Tkhd.Encode(w); err != nil {

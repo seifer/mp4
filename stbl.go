@@ -1,8 +1,11 @@
 package mp4
 
-import "io"
+import (
+	"encoding/binary"
+	"io"
+)
 
-// Sample Table Box (stbl - mandatory)
+// Soample Table Box (stbl - mandatory)
 //
 // Contained in : Media Information Box (minf)
 //
@@ -10,13 +13,14 @@ import "io"
 //
 // The table contains all information relevant to data samples (times, chunks, sizes, ...)
 type StblBox struct {
-	Stts  *SttsBox
-	Stss  *StssBox
-	Stsc  *StscBox
-	Stsz  *StszBox
-	Stco  *StcoBox
-	Ctts  *CttsBox
-	boxes []Box
+	Stts   *SttsBox
+	Stss   *StssBox
+	Stsc   *StscBox
+	Stsz   *StszBox
+	Stco   *StcoBox
+	Ctts   *CttsBox
+	boxes  []Box
+	header [8]byte
 }
 
 func DecodeStbl(r io.Reader) (Box, error) {
@@ -84,9 +88,6 @@ func (b *StblBox) Dump() {
 	if b.Stts != nil {
 		b.Stts.Dump()
 	}
-	if b.Stsz != nil {
-		b.Stsz.Dump()
-	}
 	if b.Stss != nil {
 		b.Stss.Dump()
 	}
@@ -96,7 +97,9 @@ func (b *StblBox) Dump() {
 }
 
 func (b *StblBox) Encode(w io.Writer) error {
-	err := EncodeHeader(b, w)
+	binary.BigEndian.PutUint32(b.header[:4], uint32(b.Size()))
+	copy(b.header[4:], b.Type())
+	_, err := w.Write(b.header[:])
 	if err != nil {
 		return err
 	}

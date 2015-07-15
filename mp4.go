@@ -27,7 +27,7 @@ func Decode(r io.Reader) (*MP4, error) {
 		return nil, err
 	}
 	v := &MP4{
-		boxes: make([]Box, 0, len(l)-3),
+		boxes: make([]Box, 0, len(l)),
 	}
 	for _, b := range l {
 		switch b.Type() {

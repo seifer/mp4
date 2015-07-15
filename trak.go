@@ -19,7 +19,7 @@ func DecodeTrak(r io.Reader) (Box, error) {
 		return nil, err
 	}
 	t := &TrakBox{
-		boxes: make([]Box, 0, len(l)-2),
+		boxes: make([]Box, 0, len(l)),
 	}
 	for _, b := range l {
 		switch b.Type() {

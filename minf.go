@@ -58,7 +58,7 @@ func (b *MinfBox) Encode(w io.Writer) (err error) {
 	copy(b.header[4:], b.Type())
 	_, err = w.Write(b.header[:])
 	if err != nil {
-		return err
+		return
 	}
 
 	for _, b := range b.boxes {

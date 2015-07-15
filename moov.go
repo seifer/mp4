@@ -68,7 +68,7 @@ func (b *MoovBox) Encode(w io.Writer) (err error) {
 	copy(b.header[4:], b.Type())
 	_, err = w.Write(b.header[:])
 	if err != nil {
-		return err
+		return
 	}
 
 	for _, t := range b.Trak {

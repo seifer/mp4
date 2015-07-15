@@ -14,7 +14,6 @@ const (
 
 var (
 	ErrTruncatedHeader = errors.New("truncated header")
-	ErrBadFormat       = errors.New("bad format")
 )
 
 var decoders map[string]BoxDecoder
@@ -123,6 +122,7 @@ func putFixed32(bytes []byte, i Fixed32) {
 	binary.BigEndian.PutUint32(bytes, uint32(i))
 }
 
+// Utils
 func makebuf(b Box) []byte {
 	return make([]byte, b.Size()-BoxHeaderSize)
 }

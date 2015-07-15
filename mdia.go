@@ -10,9 +10,9 @@ import "io"
 //
 // Contains all information about the media data.
 type MdiaBox struct {
-	Mdhd *MdhdBox
-	Hdlr *HdlrBox
-	Minf *MinfBox
+	Mdhd  *MdhdBox
+	Minf  *MinfBox
+	boxes []Box
 }
 
 func DecodeMdia(r io.Reader) (Box, error) {
@@ -20,17 +20,17 @@ func DecodeMdia(r io.Reader) (Box, error) {
 	if err != nil {
 		return nil, err
 	}
-	m := &MdiaBox{}
+	m := &MdiaBox{
+		boxes: make([]Box, 0, len(l)),
+	}
 	for _, b := range l {
 		switch b.Type() {
 		case "mdhd":
 			m.Mdhd = b.(*MdhdBox)
-		case "hdlr":
-			m.Hdlr = b.(*HdlrBox)
 		case "minf":
 			m.Minf = b.(*MinfBox)
 		default:
-			return nil, ErrBadFormat
+			m.boxes = append(m.boxes, b)
 		}
 	}
 	return m, nil
@@ -40,14 +40,17 @@ func (b *MdiaBox) Type() string {
 	return "mdia"
 }
 
-func (b *MdiaBox) Size() int {
-	sz := b.Mdhd.Size()
-	if b.Hdlr != nil {
-		sz += b.Hdlr.Size()
-	}
+func (b *MdiaBox) Size() (sz int) {
+	sz += b.Mdhd.Size()
+
 	if b.Minf != nil {
 		sz += b.Minf.Size()
 	}
+
+	for _, box := range b.boxes {
+		sz += box.Size()
+	}
+
 	return sz + BoxHeaderSize
 }
 
@@ -67,11 +70,12 @@ func (b *MdiaBox) Encode(w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if b.Hdlr != nil {
-		err = b.Hdlr.Encode(w)
-		if err != nil {
+
+	for _, b := range b.boxes {
+		if err = b.Encode(w); err != nil {
 			return err
 		}
 	}
+
 	return b.Minf.Encode(w)
 }

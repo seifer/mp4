@@ -10,13 +10,13 @@ import "io"
 //
 // The table contains all information relevant to data samples (times, chunks, sizes, ...)
 type StblBox struct {
-	Stsd *StsdBox
-	Stts *SttsBox
-	Stss *StssBox
-	Stsc *StscBox
-	Stsz *StszBox
-	Stco *StcoBox
-	Ctts *CttsBox
+	Stts  *SttsBox
+	Stss  *StssBox
+	Stsc  *StscBox
+	Stsz  *StszBox
+	Stco  *StcoBox
+	Ctts  *CttsBox
+	boxes []Box
 }
 
 func DecodeStbl(r io.Reader) (Box, error) {
@@ -24,11 +24,11 @@ func DecodeStbl(r io.Reader) (Box, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &StblBox{}
+	s := &StblBox{
+		boxes: make([]Box, 0, len(l)),
+	}
 	for _, b := range l {
 		switch b.Type() {
-		case "stsd":
-			s.Stsd = b.(*StsdBox)
 		case "stts":
 			s.Stts = b.(*SttsBox)
 		case "stsc":
@@ -41,6 +41,8 @@ func DecodeStbl(r io.Reader) (Box, error) {
 			s.Stco = b.(*StcoBox)
 		case "ctts":
 			s.Ctts = b.(*CttsBox)
+		default:
+			s.boxes = append(s.boxes, b)
 		}
 	}
 	return s, nil
@@ -50,8 +52,7 @@ func (b *StblBox) Type() string {
 	return "stbl"
 }
 
-func (b *StblBox) Size() int {
-	sz := b.Stsd.Size()
+func (b *StblBox) Size() (sz int) {
 	if b.Stts != nil {
 		sz += b.Stts.Size()
 	}
@@ -69,6 +70,9 @@ func (b *StblBox) Size() int {
 	}
 	if b.Ctts != nil {
 		sz += b.Ctts.Size()
+	}
+	for _, box := range b.boxes {
+		sz += box.Size()
 	}
 	return sz + BoxHeaderSize
 }
@@ -96,10 +100,6 @@ func (b *StblBox) Encode(w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	err = b.Stsd.Encode(w)
-	if err != nil {
-		return err
-	}
 	err = b.Stts.Encode(w)
 	if err != nil {
 		return err
@@ -121,6 +121,11 @@ func (b *StblBox) Encode(w io.Writer) error {
 	err = b.Stco.Encode(w)
 	if err != nil {
 		return err
+	}
+	for _, b := range b.boxes {
+		if err = b.Encode(w); err != nil {
+			return err
+		}
 	}
 	if b.Ctts != nil {
 		return b.Ctts.Encode(w)

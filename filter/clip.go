@@ -356,7 +356,7 @@ func (f *clipFilter) WriteToN(dst io.Writer, size int64) (n int64, err error) {
 
 func (f *clipFilter) buildChunkList() {
 	var sz, mt int
-	var mv, off, size, sample, current, samples, descriptionID, chunkFirstSample uint32
+	var mv, off, size, sample, current, descriptionID, chunkFirstSample uint32
 
 	for _, t := range f.m.Moov.Trak {
 		sz += len(t.Mdia.Minf.Stbl.Stco.ChunkOffset)
@@ -400,12 +400,6 @@ func (f *clipFilter) buildChunkList() {
 		}
 	}
 
-	// Calculate first and last sample
-	for tnum, t := range f.m.Moov.Trak {
-		ti[tnum].firstSample = t.Mdia.Minf.Stbl.Stts.GetSample(uint32(f.begin.Seconds()) * t.Mdia.Mdhd.Timescale)
-		ti[tnum].lastSample = t.Mdia.Minf.Stbl.Stts.GetSample(uint32(f.end.Seconds()) * t.Mdia.Mdhd.Timescale)
-	}
-
 	// Skip excess chunks
 	for tnum, t := range f.m.Moov.Trak {
 		cti := &ti[tnum]
@@ -414,14 +408,16 @@ func (f *clipFilter) buildChunkList() {
 		stsc := t.Mdia.Minf.Stbl.Stsc
 		stts := t.Mdia.Minf.Stbl.Stts
 
+		cti.firstSample = t.Mdia.Minf.Stbl.Stts.GetSample(uint32(f.begin.Seconds()) * t.Mdia.Mdhd.Timescale)
+		cti.lastSample = t.Mdia.Minf.Stbl.Stts.GetSample(uint32(f.end.Seconds()) * t.Mdia.Mdhd.Timescale)
+
 		for i, _ := range stco.ChunkOffset {
 			if cti.sci < len(stsc.FirstChunk)-1 && i+1 >= int(stsc.FirstChunk[cti.sci+1]) {
 				cti.sci++
 			}
 
-			samples = stsc.SamplesPerChunk[cti.sci]
 			chunkFirstSample = cti.currentSample
-			cti.currentSample += samples
+			cti.currentSample += stsc.SamplesPerChunk[cti.sci]
 
 			if cti.currentSample < cti.firstSample || chunkFirstSample > cti.lastSample {
 				continue
@@ -429,8 +425,11 @@ func (f *clipFilter) buildChunkList() {
 
 			cti.startTC = stts.GetTimeCode(chunkFirstSample)
 			cti.currentChunk = i
-			cti.currentSample -= samples
-			cti.firstSample = cti.currentSample + 1
+
+			cti.firstSample = chunkFirstSample + 1
+			cti.currentSample = chunkFirstSample
+
+			fmt.Println("I", i, cti.currentSample, cti.firstSample, chunkFirstSample, cti.lastSample)
 
 			break
 		}
@@ -471,8 +470,8 @@ func (f *clipFilter) buildChunkList() {
 		size = 0
 
 		for i := 0; i < int(samples); i++ {
+			size += stsz.GetSampleSize(int(cti.currentSample))
 			cti.currentSample++
-			size += stsz.GetSampleSize(int(cti.currentSample) - 1)
 		}
 
 		off += size

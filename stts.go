@@ -81,11 +81,26 @@ func (b *SttsBox) Encode(w io.Writer) error {
 	return err
 }
 
+// Find sample number by timecode in units
+func (b *SttsBox) GetSample(units uint32) uint32 {
+	var fbs, fbm uint32
+
+	for i := 0; i < len(b.SampleCount); i++ {
+		fbm = b.SampleCount[i] * b.SampleTimeDelta[i]
+
+		if fbm+fbm > units {
+			return (units - fbs) / b.SampleTimeDelta[i]
+		}
+
+		fbs += fbm
+	}
+
+	return 0
+}
+
 // GetTimeCode returns the timecode (duration since the beginning of the media)
 // of the beginning of a sample
 func (b *SttsBox) GetTimeCode(sample uint32) (units uint32) {
-	sample++
-
 	for i := 0; sample > 0 && i < len(b.SampleCount); i++ {
 		if sample >= b.SampleCount[i] {
 			units += b.SampleCount[i] * b.SampleTimeDelta[i]

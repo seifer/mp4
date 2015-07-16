@@ -73,3 +73,32 @@ func (b *StssBox) Encode(w io.Writer) error {
 	_, err = w.Write(buf)
 	return err
 }
+
+// Find closest l-frame
+func (b *StssBox) GetClosestSample(sample uint32) uint32 {
+	sample++
+
+	if len(b.SampleNumber) == 0 {
+		return sample
+	}
+
+	if sample < b.SampleNumber[0] {
+		return b.SampleNumber[0]
+	}
+
+	if sample > b.SampleNumber[len(b.SampleNumber)-1] {
+		return b.SampleNumber[len(b.SampleNumber)-1]
+	}
+
+	for i := 0; i < len(b.SampleNumber); i++ {
+		if b.SampleNumber[i] > sample {
+			if b.SampleNumber[i]-sample > sample-b.SampleNumber[i-1] {
+				return b.SampleNumber[i-1]
+			} else {
+				return b.SampleNumber[i]
+			}
+		}
+	}
+
+	return sample
+}

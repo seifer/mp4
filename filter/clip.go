@@ -42,10 +42,9 @@ type trakInfo struct {
 
 	index         uint32
 	startTC       uint32
-	filterBegin   uint32
-	filterEnd     uint32
 	currentSample uint32
 	firstSample   uint32
+	lastSample    uint32
 }
 
 type clipFilter struct {
@@ -357,7 +356,7 @@ func (f *clipFilter) WriteToN(dst io.Writer, size int64) (n int64, err error) {
 
 func (f *clipFilter) buildChunkList() {
 	var sz, mt int
-	var mv, off, size, firstTC, lastTC, sample, current, samples, descriptionID uint32
+	var mv, off, size, sample, current, samples, descriptionID, chunkFirstSample uint32
 
 	for _, t := range f.m.Moov.Trak {
 		sz += len(t.Mdia.Minf.Stbl.Stco.ChunkOffset)
@@ -379,38 +378,32 @@ func (f *clipFilter) buildChunkList() {
 	firstChunkSamples := make([]uint32, cnt, cnt)
 	firstChunkDescriptionID := make([]uint32, cnt, cnt)
 
-	fbegin := f.begin
-	fend := f.end
-
-	// Find close l-frame from begin and end
+	// Correct filters (begin, end) timecode
 	for tnum, t := range f.m.Moov.Trak {
-		var p uint32
-
-		cti := &ti[tnum]
-
 		newFirstChunk[tnum] = make([]uint32, 0, len(t.Mdia.Minf.Stbl.Stsc.FirstChunk))
 		newChunkOffset[tnum] = make([]uint32, 0, len(t.Mdia.Minf.Stbl.Stco.ChunkOffset))
 		newSamplesPerChunk[tnum] = make([]uint32, 0, len(t.Mdia.Minf.Stbl.Stsc.SamplesPerChunk))
 		newSampleDescriptionID[tnum] = make([]uint32, 0, len(t.Mdia.Minf.Stbl.Stsc.SampleDescriptionID))
 
-		cti.filterBegin = uint32(int64(fbegin) * int64(t.Mdia.Mdhd.Timescale) / int64(time.Second))
-		cti.filterEnd = uint32(int64(fend) * int64(t.Mdia.Mdhd.Timescale) / int64(time.Second))
-
+		// Find stss. Video trak
 		if stss := t.Mdia.Minf.Stbl.Stss; stss != nil {
 			stts := t.Mdia.Minf.Stbl.Stts
 
-			for i := 0; i < len(stss.SampleNumber); i++ {
-				tc := stts.GetTimeCode(stss.SampleNumber[i] - 1)
+			// Find sample number current begin timecode
+			fs := stts.GetSample(uint32(f.begin.Seconds()) * t.Mdia.Mdhd.Timescale)
 
-				if tc > cti.filterBegin {
-					cti.filterBegin = p
-					fbegin = time.Second * time.Duration(p) / time.Duration(t.Mdia.Mdhd.Timescale)
-					break
-				}
+			// Find timecode for closest l-frame
+			tc := stts.GetTimeCode(stss.GetClosestSample(fs))
 
-				p = tc
-			}
+			// Rebuild begin timecode
+			f.begin = time.Second * time.Duration(tc) / time.Duration(t.Mdia.Mdhd.Timescale)
 		}
+	}
+
+	// Calculate first and last sample
+	for tnum, t := range f.m.Moov.Trak {
+		ti[tnum].firstSample = t.Mdia.Minf.Stbl.Stts.GetSample(uint32(f.begin.Seconds()) * t.Mdia.Mdhd.Timescale)
+		ti[tnum].lastSample = t.Mdia.Minf.Stbl.Stts.GetSample(uint32(f.end.Seconds()) * t.Mdia.Mdhd.Timescale)
 	}
 
 	// Skip excess chunks
@@ -427,16 +420,14 @@ func (f *clipFilter) buildChunkList() {
 			}
 
 			samples = stsc.SamplesPerChunk[cti.sci]
-
-			firstTC = stts.GetTimeCode(cti.currentSample)
+			chunkFirstSample = cti.currentSample
 			cti.currentSample += samples
-			lastTC = stts.GetTimeCode(cti.currentSample)
 
-			if lastTC < cti.filterBegin || firstTC > cti.filterEnd {
+			if cti.currentSample < cti.firstSample || chunkFirstSample > cti.lastSample {
 				continue
 			}
 
-			cti.startTC = firstTC
+			cti.startTC = stts.GetTimeCode(chunkFirstSample)
 			cti.currentChunk = i
 			cti.currentSample -= samples
 			cti.firstSample = cti.currentSample + 1

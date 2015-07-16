@@ -429,8 +429,6 @@ func (f *clipFilter) buildChunkList() {
 			cti.firstSample = chunkFirstSample + 1
 			cti.currentSample = chunkFirstSample
 
-			fmt.Println("I", i, cti.currentSample, cti.firstSample, chunkFirstSample, cti.lastSample)
-
 			break
 		}
 

@@ -41,10 +41,8 @@ type trakInfo struct {
 	currentChunk int
 
 	index         uint32
-	startTC       uint32
 	currentSample uint32
 	firstSample   uint32
-	lastSample    uint32
 }
 
 type clipFilter struct {
@@ -231,27 +229,6 @@ func (f *clipFilter) Filter() (err error) {
 	return
 }
 
-func (f *clipFilter) compactChunks() {
-	newChunks := make([]chunk, 0, 4)
-	last := f.chunks[0]
-	last.newOffset = int64(f.bufferLength)
-	lastBound := last.oldOffset + last.size
-	for i := 1; i < len(f.chunks); i++ {
-		ch := f.chunks[i]
-		if lastBound == ch.oldOffset {
-			lastBound += ch.size
-			last.size += ch.size
-		} else {
-			newChunks = append(newChunks, last)
-			ch.newOffset = last.newOffset + last.size
-			last = ch
-			lastBound = ch.oldOffset + ch.size
-		}
-	}
-	newChunks = append(newChunks, last)
-	f.chunks = newChunks
-}
-
 func (f *clipFilter) WriteTo(w io.Writer) (n int64, err error) {
 	var nn int
 	var nnn int64
@@ -354,6 +331,27 @@ func (f *clipFilter) WriteToN(dst io.Writer, size int64) (n int64, err error) {
 	return
 }
 
+func (f *clipFilter) compactChunks() {
+	newChunks := make([]chunk, 0, 4)
+	last := f.chunks[0]
+	last.newOffset = int64(f.bufferLength)
+	lastBound := last.oldOffset + last.size
+	for i := 1; i < len(f.chunks); i++ {
+		ch := f.chunks[i]
+		if lastBound == ch.oldOffset {
+			lastBound += ch.size
+			last.size += ch.size
+		} else {
+			newChunks = append(newChunks, last)
+			ch.newOffset = last.newOffset + last.size
+			last = ch
+			lastBound = ch.oldOffset + ch.size
+		}
+	}
+	newChunks = append(newChunks, last)
+	f.chunks = newChunks
+}
+
 func (f *clipFilter) buildChunkList() {
 	var sz, mt int
 	var mv, off, size, sample, current, descriptionID, chunkFirstSample uint32
@@ -406,10 +404,9 @@ func (f *clipFilter) buildChunkList() {
 
 		stco := t.Mdia.Minf.Stbl.Stco
 		stsc := t.Mdia.Minf.Stbl.Stsc
-		stts := t.Mdia.Minf.Stbl.Stts
 
-		cti.firstSample = t.Mdia.Minf.Stbl.Stts.GetSample(uint32(f.begin.Seconds()) * t.Mdia.Mdhd.Timescale)
-		cti.lastSample = t.Mdia.Minf.Stbl.Stts.GetSample(uint32(f.end.Seconds()) * t.Mdia.Mdhd.Timescale)
+		firstSample := t.Mdia.Minf.Stbl.Stts.GetSample(uint32(f.begin.Seconds()) * t.Mdia.Mdhd.Timescale)
+		lastSample := t.Mdia.Minf.Stbl.Stts.GetSample(uint32(f.end.Seconds()) * t.Mdia.Mdhd.Timescale)
 
 		for i, _ := range stco.ChunkOffset {
 			if cti.sci < len(stsc.FirstChunk)-1 && i+1 >= int(stsc.FirstChunk[cti.sci+1]) {
@@ -419,13 +416,11 @@ func (f *clipFilter) buildChunkList() {
 			chunkFirstSample = cti.currentSample
 			cti.currentSample += stsc.SamplesPerChunk[cti.sci]
 
-			if cti.currentSample < cti.firstSample || chunkFirstSample > cti.lastSample {
+			if cti.currentSample < firstSample || chunkFirstSample > lastSample {
 				continue
 			}
 
-			cti.startTC = stts.GetTimeCode(chunkFirstSample)
 			cti.currentChunk = i
-
 			cti.firstSample = chunkFirstSample + 1
 			cti.currentSample = chunkFirstSample
 
@@ -502,10 +497,11 @@ func (f *clipFilter) buildChunkList() {
 	for tnum, t := range f.m.Moov.Trak {
 		cti := &ti[tnum]
 		stts := t.Mdia.Minf.Stbl.Stts
+		start := stts.GetTimeCode(cti.firstSample)
 		end := stts.GetTimeCode(cti.currentSample)
 
-		t.Tkhd.Duration = ((end - cti.startTC) / t.Mdia.Mdhd.Timescale) * f.m.Moov.Mvhd.Timescale
-		t.Mdia.Mdhd.Duration = end - cti.startTC
+		t.Tkhd.Duration = ((end - start) / t.Mdia.Mdhd.Timescale) * f.m.Moov.Mvhd.Timescale
+		t.Mdia.Mdhd.Duration = end - start
 
 		if t.Tkhd.Duration > f.m.Moov.Mvhd.Duration {
 			f.m.Moov.Mvhd.Duration = t.Tkhd.Duration

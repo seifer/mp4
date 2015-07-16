@@ -428,9 +428,9 @@ func (f *clipFilter) buildChunkList() {
 
 			samples = stsc.SamplesPerChunk[cti.sci]
 
-			firstTC = stts.GetTimeCode(cti.currentSample + 1)
+			firstTC = stts.GetTimeCode(cti.currentSample)
 			cti.currentSample += samples
-			lastTC = stts.GetTimeCode(cti.currentSample + 1)
+			lastTC = stts.GetTimeCode(cti.currentSample)
 
 			if lastTC < cti.filterBegin || firstTC > cti.filterEnd {
 				continue
@@ -514,7 +514,7 @@ func (f *clipFilter) buildChunkList() {
 	for tnum, t := range f.m.Moov.Trak {
 		cti := &ti[tnum]
 		stts := t.Mdia.Minf.Stbl.Stts
-		end := stts.GetTimeCode(cti.currentSample + 1)
+		end := stts.GetTimeCode(cti.currentSample)
 
 		t.Tkhd.Duration = ((end - cti.startTC) / t.Mdia.Mdhd.Timescale) * f.m.Moov.Mvhd.Timescale
 		t.Mdia.Mdhd.Duration = end - cti.startTC

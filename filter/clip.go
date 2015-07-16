@@ -570,7 +570,7 @@ func (f *clipFilter) buildChunkList() {
 
 		// ctts - time offsets (b-frames)
 		if ctts := t.Mdia.Minf.Stbl.Ctts; ctts != nil {
-			sample = 1
+			sample = 0
 
 			firstSample := cti.firstSample
 			currentSample := cti.currentSample

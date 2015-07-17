@@ -142,7 +142,7 @@ func (f *clipFilter) Read(buf []byte) (n int, err error) {
 
 	s, seekable := f.reader.(io.ReadSeeker)
 
-	for f.firstChunk < len(f.chunks) && err != nil && len(buf) > 0 {
+	for f.firstChunk < len(f.chunks) && err == nil && len(buf) > 0 {
 		c := f.chunks[f.firstChunk]
 
 		if f.offset >= c.newOffset+c.size {

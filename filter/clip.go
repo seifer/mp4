@@ -509,7 +509,7 @@ func (f *clipFilter) buildChunkList() {
 
 		// stts - sample duration
 		if stts := t.Mdia.Minf.Stbl.Stts; stts != nil {
-			sample = 1
+			sample = 0
 			current = 0
 
 			firstSample := cti.firstSample

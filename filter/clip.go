@@ -222,7 +222,9 @@ func (f *clipFilter) Filter() (err error) {
 	f.reader = f.m.Mdat.Reader()
 	f.bufferLength = len(f.buffer)
 
-	f.compactChunks()
+	if len(f.chunks) > 0 {
+		f.compactChunks()
+	}
 
 	f.m = nil
 
@@ -361,7 +363,6 @@ func (f *clipFilter) buildChunkList() {
 	}
 
 	f.m.Mdat.ContentSize = 0
-	f.m.Moov.Mvhd.Duration = 0
 
 	f.chunks = make([]chunk, 0, sz)
 
@@ -398,6 +399,8 @@ func (f *clipFilter) buildChunkList() {
 		}
 	}
 
+	f.m.Moov.Mvhd.Duration = uint32((f.end - f.begin).Seconds()) * f.m.Moov.Mvhd.Timescale
+
 	// Skip excess chunks
 	for tnum, t := range f.m.Moov.Trak {
 		cti := &ti[tnum]
@@ -416,12 +419,13 @@ func (f *clipFilter) buildChunkList() {
 			chunkFirstSample = cti.currentSample
 			cti.currentSample += stsc.SamplesPerChunk[cti.sci]
 
-			if cti.currentSample < firstSample || chunkFirstSample > lastSample {
+			if cti.currentSample-1 < firstSample || chunkFirstSample > lastSample {
 				continue
 			}
 
 			cti.currentChunk = i
-			cti.firstSample = chunkFirstSample + 1
+
+			cti.firstSample = chunkFirstSample
 			cti.currentSample = chunkFirstSample
 
 			break
@@ -503,10 +507,6 @@ func (f *clipFilter) buildChunkList() {
 		t.Tkhd.Duration = ((end - start) / t.Mdia.Mdhd.Timescale) * f.m.Moov.Mvhd.Timescale
 		t.Mdia.Mdhd.Duration = end - start
 
-		if t.Tkhd.Duration > f.m.Moov.Mvhd.Duration {
-			f.m.Moov.Mvhd.Duration = t.Tkhd.Duration
-		}
-
 		// stts - sample duration
 		if stts := t.Mdia.Minf.Stbl.Stts; stts != nil {
 			sample = 0
@@ -555,7 +555,7 @@ func (f *clipFilter) buildChunkList() {
 
 			for _, n := range oldSampleNumber {
 				if n >= firstSample && n <= currentSample {
-					newSampleNumber = append(newSampleNumber, n-firstSample+1)
+					newSampleNumber = append(newSampleNumber, n-firstSample)
 				}
 			}
 
@@ -564,8 +564,8 @@ func (f *clipFilter) buildChunkList() {
 
 		// stsz (sample sizes)
 		if stsz := t.Mdia.Minf.Stbl.Stsz; stsz != nil {
-			stsz.SampleStart = cti.firstSample - 1
-			stsz.SampleNumber = cti.currentSample - cti.firstSample + 1
+			stsz.SampleStart = cti.firstSample
+			stsz.SampleNumber = cti.currentSample - cti.firstSample
 		}
 
 		// ctts - time offsets (b-frames)
@@ -585,7 +585,7 @@ func (f *clipFilter) buildChunkList() {
 				if sample+oldSampleCount[i] >= firstSample {
 					current := oldSampleCount[i]
 
-					if sample+oldSampleCount[i] > firstSample && sample < firstSample {
+					if sample+oldSampleCount[i] >= firstSample && sample < firstSample {
 						current += sample - firstSample
 					}
 

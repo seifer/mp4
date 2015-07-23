@@ -89,11 +89,15 @@ func (b *SttsBox) GetSample(units uint32) (sample uint32) {
 		fbm = b.SampleCount[i] * b.SampleTimeDelta[i]
 
 		if fbs+fbm > units {
-			return sample + (units-fbs)/b.SampleTimeDelta[i]
+			return sample + (units-fbs)/b.SampleTimeDelta[i] - 1
 		}
 
 		fbs += fbm
 		sample += b.SampleCount[i]
+	}
+
+	if sample > 0 {
+		sample--
 	}
 
 	return

@@ -1,6 +1,7 @@
 package mp4
 
 import (
+	"bufio"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -19,7 +20,7 @@ type MoovBox struct {
 }
 
 func DecodeMoov(r io.Reader) (Box, error) {
-	l, err := DecodeContainer(r)
+	l, err := DecodeContainer(bufio.NewReaderSize(r, 512*1024))
 	if err != nil {
 		return nil, err
 	}
